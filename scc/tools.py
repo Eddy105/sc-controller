@@ -12,7 +12,15 @@ from scc.paths import get_profiles_path, get_default_profiles_path
 from scc.paths import get_menus_path, get_default_menus_path
 from scc.paths import get_button_images_path
 from math import pi as PI, sin, cos, atan2, sqrt
-import os, sys, ctypes, imp, shlex, gettext, logging
+import os, sys, ctypes, importlib as imp, shlex, gettext, logging
+import importlib.util
+spec = importlib.util.find_spec('modulename')
+if spec is None:
+    print("Modul nicht gefunden")
+else:
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
 
 HAVE_POSIX1E = False
 try:
@@ -50,7 +58,7 @@ def init_logging(prefix="", suffix=""):
 	old_log = logging.Logger._log
 	def _log(self, level, msg, args, exc_info=None, extra=None):
 		args = tuple([
-			(str(c).decode("utf-8") if type(c) is str else c)
+			(c.decode("utf-8") if isinstance(c, bytes) else str(c))
 			for c in args
 		])
 		msg = msg if type(msg) is unicode else str(msg).decode("utf-8")
