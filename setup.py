@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
-"""Build and install SC Controller.
-
-The project contains native Linux extensions for uinput and controller
-integration.  Keep the legacy file layout for now while using modern
-setuptools-based packaging.
-"""
+"""Build and install SC Controller."""
 
 from glob import glob
 from setuptools import Extension, setup
 
-from scc.constants import DAEMON_VERSION
 
+DAEMON_VERSION = "0.4.8"
 
 data_files = [
     ("share/scc/glade", glob("glade/*.glade")),
