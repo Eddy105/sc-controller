@@ -1,5 +1,6 @@
 name: CI
 
+# Trigger the matrix on every modernization-branch push.
 on:
   push:
     branches: [master, "modernize/**"]
