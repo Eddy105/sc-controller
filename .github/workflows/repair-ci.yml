@@ -1,0 +1,91 @@
+name: One-shot CI repair
+
+on:
+  push:
+    branches: ["modernize/python3-core"]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: modernize/python3-core
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Apply compatibility fixes
+        env:
+          PYTHONPATH: .
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          # GTK/Glade test requires every widget object to have an id.
+          p = Path("glade/app.glade")
+          s = p.read_text()
+          pattern = r'(<object class="GtkMenuButton" id="btDaemon">.*?<child>\s*<object class="GtkBox")[ >]'
+          ns, count = re.subn(
+              pattern,
+              lambda m: m.group(1) + ' id="boxDaemonMenu">',
+              s,
+              count=1,
+              flags=re.DOTALL,
+          )
+          if count == 0:
+              raise SystemExit("Could not locate anonymous GtkBox inside btDaemon")
+          p.write_text(ns)
+
+          # Python 3 Enum values must serialize by symbolic name, not by their
+          # integer value. String parameters retain the parser's quoted form.
+          p = Path("scc/actions.py")
+          s = p.read_text()
+          if "from enum import Enum\n" not in s:
+              s = s.replace("import sys, time, logging, inspect\n", "import sys, time, logging, inspect\nfrom enum import Enum\n")
+          old = '''\t@staticmethod\n\tdef _encode_parameter(parameter):\n\t\t""" Encodes one parameter. Used by encode_parameters """\n\t\tif parameter in PARSER_CONSTANTS:\n\t\t\treturn parameter\n\t\tif type(parameter) in (str, unicode):\n\t\t\treturn "'%s'" % (str(parameter).encode('string_escape'),)\n\t\treturn nameof(parameter)\n'''
+          new = '''\t@staticmethod\n\tdef _encode_parameter(parameter):\n\t\t"""Encode a parameter using the canonical parser representation."""\n\t\tif isinstance(parameter, Enum):\n\t\t\treturn parameter.name\n\t\tif parameter in PARSER_CONSTANTS:\n\t\t\treturn parameter\n\t\tif isinstance(parameter, str):\n\t\t\tescaped = parameter.encode("unicode_escape").decode("ascii")\n\t\t\treturn "'%s'" % escaped\n\t\treturn str(parameter)\n'''
+          if old not in s:
+              raise SystemExit("Could not locate Action._encode_parameter")
+          p.write_text(s.replace(old, new, 1))
+
+          # Special actions historically used Python 2 byte-string escaping.
+          # Route their text serialization through the same Python 3-safe
+          # parameter encoder as the base Action class.
+          p = Path("scc/special_actions.py")
+          s = p.read_text()
+          replacements = {
+              '''\t\treturn (" " * pad) + "%s('%s')" % (self.COMMAND,\n\t\t\t\tself.profile.encode('utf-8').encode('string_escape'))''':
+              '''\t\treturn (" " * pad) + "%s(%s)" % (self.COMMAND,\n\t\t\t\tAction._encode_parameter(self.profile))''',
+              '''\t\treturn (" " * pad) + "%s('%s')" % (self.COMMAND, self.parameters[0].encode('unicode_escape'))''':
+              '''\t\treturn (" " * pad) + "%s(%s)" % (self.COMMAND,\n\t\t\t\tAction._encode_parameter(self.parameters[0]))''',
+              '''\t\t\tparameters.append("'%s'" % (str(self.text).encode('string_escape'),))''':
+              '''\t\t\tparameters.append(Action._encode_parameter(self.text))''',
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit("Could not locate expected special-action serializer")
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+      - name: Verify complete test suite
+        env:
+          PYTHONPATH: .
+        run: python -m pip install --upgrade pip setuptools pytest && python -m pytest tests
+
+      - name: Commit fixes and remove repair workflow
+        run: |
+          rm .github/workflows/repair-ci.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scc/actions.py scc/special_actions.py glade/app.glade .github/workflows/repair-ci.yml
+          git commit -m "fix: resolve remaining Python 3 CI failures"
+          git push origin HEAD:modernize/python3-core
