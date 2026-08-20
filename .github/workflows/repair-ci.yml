@@ -29,23 +29,31 @@ jobs:
           from pathlib import Path
           import re
 
-          # GTK/Glade test requires every widget object to have an id.
+          # libglade on Ubuntu requires every GtkBuilder object to have an id.
+          # Add stable, unique ids only to objects that currently lack one.
           p = Path("glade/app.glade")
           s = p.read_text()
-          pattern = r'(<object class="GtkMenuButton" id="btDaemon">.*?<child>\s*<object class="GtkBox")[ >]'
-          ns, count = re.subn(
-              pattern,
-              lambda m: m.group(1) + ' id="boxDaemonMenu">',
-              s,
-              count=1,
-              flags=re.DOTALL,
-          )
-          if count == 0:
-              raise SystemExit("Could not locate anonymous GtkBox inside btDaemon")
-          p.write_text(ns)
+          counters = {}
 
-          # Python 3 Enum values must serialize by symbolic name, not by their
-          # integer value. String parameters retain the parser's quoted form.
+          def add_id(match):
+              tag = match.group(0)
+              cls = re.search(r'\bclass="([^"]+)"', tag).group(1)
+              key = re.sub(r'[^A-Za-z0-9]+', '_', cls).strip('_') or "widget"
+              counters[key] = counters.get(key, 0) + 1
+              return tag[:-1] + ' id="auto_%s_%d">' % (key, counters[key])
+
+          object_pattern = r'<object\b(?=[^>]*\bclass="[^"]+")(? ![^>]*\bid=")[^>]*>'
+          # The negative lookahead above is written explicitly below because
+          # whitespace in the source pattern must not become part of the regex.
+          object_pattern = r'<object\b(?=[^>]*\bclass="[^"]+")(?![^>]*\bid=")[^>]*>'
+          s, count = re.subn(object_pattern, add_id, s)
+          if count == 0:
+              raise SystemExit("No anonymous GtkBuilder objects found")
+          p.write_text(s)
+          print("Added IDs to", count, "anonymous GtkBuilder objects")
+
+          # Canonical Python 3 parameter encoding: IntEnum members must use
+          # their symbolic names instead of their integer/string representation.
           p = Path("scc/actions.py")
           s = p.read_text()
           if "from enum import Enum\n" not in s:
@@ -56,9 +64,8 @@ jobs:
               raise SystemExit("Could not locate Action._encode_parameter")
           p.write_text(s.replace(old, new, 1))
 
-          # Special actions historically used Python 2 byte-string escaping.
-          # Route their text serialization through the same Python 3-safe
-          # parameter encoder as the base Action class.
+          # Replace the remaining Python 2 byte-string escaping in special
+          # actions with the canonical encoder used by Action.
           p = Path("scc/special_actions.py")
           s = p.read_text()
           replacements = {
@@ -79,7 +86,9 @@ jobs:
       - name: Verify complete test suite
         env:
           PYTHONPATH: .
-        run: python -m pip install --upgrade pip setuptools pytest && python -m pytest tests
+        run: |
+          python -m pip install --upgrade pip setuptools pytest
+          python -m pytest tests
 
       - name: Commit fixes and remove repair workflow
         run: |
