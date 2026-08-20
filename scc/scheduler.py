@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 """
 SC-Controller - Scheduler
 
@@ -8,7 +8,9 @@ also called on main thread.
 
 Use schedule(delay, callback, *data) to register one-time task.
 """
-import time, Queue, logging
+import time
+import queue
+import logging
 log = logging.getLogger("Scheduler")
 
 # TODO: Maybe create actual thread for this? Use poler? Scrap everything and rewrite it in GO?
@@ -16,7 +18,7 @@ log = logging.getLogger("Scheduler")
 class Scheduler(object):
 	
 	def __init__(self):
-		self._scheduled = Queue.PriorityQueue()
+		self._scheduled = queue.PriorityQueue()
 		self._next = None
 		self._now = time.time()
 	
@@ -43,15 +45,10 @@ class Scheduler(object):
 		"""
 		Returns True if task was sucessfully removed or False if task was
 		already executed or not known at all.
-		
-		Note that this is slow as hell and completly thread-unsafe,
-		so it _has_ to be called on main thread.
 		"""
 		if task == self._next:
 			self._next = None if self._scheduled.empty() else self._scheduled.get()
 			return True
-		# Fun part: All tasks are removed from PriorityQueue
-		# until correct is found. Then everything is put back
 		tasks, found = [], False
 		while not self._scheduled.empty():
 			t = self._scheduled.get()
@@ -84,4 +81,3 @@ class Task(object):
 		""" Marks task as canceled, without actually removing it from scheduler """
 		self.callback = lambda *a, **b: False
 		self.data = ()
-
