@@ -3,6 +3,8 @@ name: Repair Python 3 compatibility
 on:
   push:
     branches: ["modernize/python3-core"]
+  pull_request:
+    types: [synchronize]
 
 permissions:
   contents: write
