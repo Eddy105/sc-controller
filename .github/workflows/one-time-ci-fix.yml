@@ -1,0 +1,53 @@
+name: One-time Python 3 CI fix
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 1
+
+      - name: Apply permanent Python 3 serialization fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("scc/actions.py")
+          s = p.read_text()
+
+          old = '''\tdef to_string(self, multiline=False, pad=0):\n\t\t""" Converts action back to string """\n\t\treturn (" " * pad) + "%s(%s)" % (self.COMMAND, ", ".join([\n\t\t\tx.to_string() if isinstance(x, Action) else str(x)\n\t\t\tfor x in self.parameters\n\t\t]))'''
+          new = '''\tdef to_string(self, multiline=False, pad=0):\n\t\t""" Converts action back to string """\n\t\treturn (" " * pad) + "%s(%s)" % (self.COMMAND, ", ".join(Action._encode_parameter(x) for x in self.parameters))'''
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          old = '''\tdef _encode_parameter(parameter):\n\t\t""" Encodes one parameter. Used by encode_parameters """\n\t\tif parameter in PARSER_CONSTANTS:\n\t\t\treturn parameter\n\t\tif type(parameter) in (str, unicode):\n\t\t\treturn "'%s'" % (str(parameter).encode('string_escape'),)\n\t\treturn nameof(parameter)'''
+          new = '''\tdef _encode_parameter(parameter):\n\t\t""" Encodes one parameter. Used by encode_parameters """\n\t\tif isinstance(parameter, Action):\n\t\t\treturn parameter.to_string()\n\t\tif parameter in PARSER_CONSTANTS:\n\t\t\treturn str(parameter)\n\t\tif type(parameter) in (str, unicode):\n\t\t\tescaped = str(parameter).encode("unicode_escape").decode("ascii")\n\t\t\treturn "'%s'" % (escaped,)\n\t\tif hasattr(parameter, "name") and parameter.name is not None:\n\t\t\treturn "%s.%s" % (parameter.__class__.__name__, parameter.name)\n\t\treturn str(parameter)'''
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+
+      - name: Verify affected tests
+        run: |
+          python -m pip install --upgrade pip setuptools pytest
+          PYTHONPATH=. python -m pytest tests/test_parser/test_actions.py tests/test_parser/test_special_actions.py tests/test_profile/test_modeshift.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- scc/actions.py
+          git diff --cached --quiet && exit 0
+          git commit -m "Fix Python 3 action serialization"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
