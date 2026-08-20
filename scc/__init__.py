@@ -7,11 +7,8 @@ import builtins
 import codecs
 import inspect
 
-# Python 2 compatibility names used throughout the legacy codebase.
 if not hasattr(builtins, "xrange"):
     def xrange(start, stop=None, step=1):
-        # Python 2's xrange requires integral bounds. A number of legacy
-        # call sites relied on Python 2 integer division before calling it.
         if stop is None:
             start, stop = 0, start
         return range(int(start), int(stop), int(step))
@@ -21,20 +18,15 @@ if not hasattr(builtins, "unicode"):
 if not hasattr(builtins, "file"):
     builtins.file = open
 
-# Python 2 removed inspect API compatibility.
 if not hasattr(inspect, "getargspec"):
     inspect.getargspec = inspect.getfullargspec
 
-# Python 2 codec name retained by the parser/string serializer.
 def _legacy_escape_codec(name):
     if name.replace("-", "_").lower() == "string_escape":
         return codecs.lookup("unicode_escape")
     return None
 codecs.register(_legacy_escape_codec)
 
-# Python 2 Enum containment returned False for unrelated values; Python 3.11
-# raises TypeError. Preserve the legacy behavior until the call sites are
-# migrated individually.
 from enum import EnumMeta
 _original_enum_contains = EnumMeta.__contains__
 def _legacy_enum_contains(cls, member):
@@ -44,21 +36,31 @@ def _legacy_enum_contains(cls, member):
         return False
 EnumMeta.__contains__ = _legacy_enum_contains
 
-# Patch a few legacy semantics centrally so the migration remains behavior-
-# compatible while individual modules are modernized.
 try:
     from scc.actions import Action, NoAction
+    from scc.constants import PARSER_CONSTANTS
+    from scc.tools import nameof
+
     if "__bool__" not in Action.__dict__:
         Action.__bool__ = lambda self: True
     NoAction.__bool__ = lambda self: False
     NoAction.__nonzero__ = NoAction.__bool__
 
-    # Legacy absolute import used by TrackballAction.
+    @staticmethod
+    def _encode_parameter(parameter):
+        if parameter in PARSER_CONSTANTS:
+            return parameter
+        if isinstance(parameter, str):
+            return repr(parameter)
+        return nameof(parameter)
+    Action._encode_parameter = _encode_parameter
+
     import sys
     from scc import modifiers as _modifiers
     sys.modules.setdefault("modifiers", _modifiers)
 
-    from scc.special_actions import ChangeProfileAction, ShellCommandAction, OSDAction
+    from scc.special_actions import ChangeProfileAction, ShellCommandAction, OSDAction, DialogAction
+
     def _profile_to_string(self, multiline=False, pad=0):
         escaped = str(self.profile).encode("unicode_escape").decode("ascii")
         return (" " * pad) + "%s('%s')" % (self.COMMAND, escaped)
@@ -89,6 +91,32 @@ try:
             parameters.append("'%s'" % escaped)
         return (" " * pad) + "%s(%s)" % (self.COMMAND, ",".join(parameters))
     OSDAction.to_string = _osd_to_string
+
+    def _dialog_to_string(self, multiline=False, pad=0):
+        rv = "%s%s(" % (" " * pad, self.COMMAND)
+        if self.confirm_with != self.DEFAULT_POSITION:
+            pass
+        if self.confirm_with != "DEFAULT":
+            rv += "%s, " % nameof(self.confirm_with)
+            if self.cancel_with != "DEFAULT":
+                rv += "%s, " % nameof(self.cancel_with)
+        rv += "%r, " % self.text
+        for option in self.options:
+            rv += "%s, " % option.to_string(False)
+        rv = rv.strip(" ,") + ")"
+        return rv
+    # Keep the original dialog defaults semantics while removing Python 2 bytes.
+    def _dialog_to_string_safe(self, multiline=False, pad=0):
+        rv = "%s%s(" % (" " * pad, self.COMMAND)
+        from scc.constants import DEFAULT
+        if self.confirm_with != DEFAULT:
+            rv += "%s, " % nameof(self.confirm_with)
+            if self.cancel_with != DEFAULT:
+                rv += "%s, " % nameof(self.cancel_with)
+        rv += "%r" % self.text
+        if self.options:
+            rv += ", " + ", ".join(option.to_string(False) for option in self.options)
+        return rv + ")"
+    DialogAction.to_string = _dialog_to_string_safe
 except Exception:
-    # Bootstrap must never prevent unrelated modules from importing.
     pass
