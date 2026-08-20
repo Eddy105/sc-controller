@@ -2,8 +2,6 @@
 """Build and install SC Controller."""
 
 from glob import glob
-from setuptools import Extension, setup
-
 
 DAEMON_VERSION = "0.4.8"
 
@@ -44,15 +42,17 @@ packages = [
     "scc.gui", "scc.gui.ae", "scc.gui.importexport", "scc.gui.creg",
 ]
 
-extensions = [
-    Extension("libuinput", sources=["scc/uinput.c"]),
-    Extension("libcemuhook", define_macros=[("PYTHON", 1)], sources=["scc/cemuhook_server.c"], libraries=["z"]),
-    Extension("libhiddrv", sources=["scc/drivers/hiddrv.c"]),
-    Extension("libsc_by_bt", sources=["scc/drivers/sc_by_bt.c"]),
-    Extension("libremotepad", sources=["scc/drivers/remotepad_controller.c"]),
-]
-
 if __name__ == "__main__":
+    from setuptools import Extension, setup
+
+    extensions = [
+        Extension("libuinput", sources=["scc/uinput.c"]),
+        Extension("libcemuhook", define_macros=[("PYTHON", 1)], sources=["scc/cemuhook_server.c"], libraries=["z"]),
+        Extension("libhiddrv", sources=["scc/drivers/hiddrv.c"]),
+        Extension("libsc_by_bt", sources=["scc/drivers/sc_by_bt.c"]),
+        Extension("libremotepad", sources=["scc/drivers/remotepad_controller.c"]),
+    ]
+
     setup(
         name="sccontroller",
         version=DAEMON_VERSION,
