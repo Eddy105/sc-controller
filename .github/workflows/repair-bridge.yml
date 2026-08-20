@@ -3,6 +3,8 @@ name: Temporary Python 3 repair bridge
 on:
   push:
     branches: ["modernize/python3-core"]
+  pull_request:
+    types: [synchronize]
 
 permissions:
   contents: write
