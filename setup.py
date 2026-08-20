@@ -40,52 +40,34 @@ data_files += [
 ]
 
 packages = [
-    "scc",
-    "scc.drivers",
-    "scc.lib",
-    "scc.x11",
-    "scc.osd",
-    "scc.foreign",
-    "scc.gui",
-    "scc.gui.ae",
-    "scc.gui.importexport",
-    "scc.gui.creg",
+    "scc", "scc.drivers", "scc.lib", "scc.x11", "scc.osd", "scc.foreign",
+    "scc.gui", "scc.gui.ae", "scc.gui.importexport", "scc.gui.creg",
 ]
 
 extensions = [
     Extension("libuinput", sources=["scc/uinput.c"]),
-    Extension(
-        "libcemuhook",
-        define_macros=[("PYTHON", 1)],
-        sources=["scc/cemuhook_server.c"],
-        libraries=["z"],
-    ),
+    Extension("libcemuhook", define_macros=[("PYTHON", 1)], sources=["scc/cemuhook_server.c"], libraries=["z"]),
     Extension("libhiddrv", sources=["scc/drivers/hiddrv.c"]),
     Extension("libsc_by_bt", sources=["scc/drivers/sc_by_bt.c"]),
     Extension("libremotepad", sources=["scc/drivers/remotepad_controller.c"]),
 ]
 
-setup(
-    name="sccontroller",
-    version=DAEMON_VERSION,
-    description="Standalone controller mapping tool for Linux",
-    author="SC Controller contributors",
-    packages=packages,
-    data_files=data_files,
-    scripts=[
-        "scripts/scc-daemon",
-        "scripts/sc-controller",
-        "scripts/scc",
-        "scripts/scc-osd-dialog",
-        "scripts/scc-osd-keyboard",
-        "scripts/scc-osd-launcher",
-        "scripts/scc-osd-menu",
-        "scripts/scc-osd-message",
-        "scripts/scc-osd-radial-menu",
-        "scripts/scc-osd-show-bindings",
-    ],
-    license="GPL-2.0-only",
-    platforms=["Linux"],
-    python_requires=">=3.9",
-    ext_modules=extensions,
-)
+if __name__ == "__main__":
+    setup(
+        name="sccontroller",
+        version=DAEMON_VERSION,
+        description="Standalone controller mapping tool for Linux",
+        author="SC Controller contributors",
+        packages=packages,
+        data_files=data_files,
+        scripts=[
+            "scripts/scc-daemon", "scripts/sc-controller", "scripts/scc",
+            "scripts/scc-osd-dialog", "scripts/scc-osd-keyboard", "scripts/scc-osd-launcher",
+            "scripts/scc-osd-menu", "scripts/scc-osd-message", "scripts/scc-osd-radial-menu",
+            "scripts/scc-osd-show-bindings",
+        ],
+        license="GPL-2.0-only",
+        platforms=["Linux"],
+        python_requires=">=3.9",
+        ext_modules=extensions,
+    )
